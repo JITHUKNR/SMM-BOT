@@ -1,8 +1,8 @@
 import os
 import logging
 import requests
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 from pymongo import MongoClient
 
 # --- CONFIGURATION ---
@@ -13,17 +13,16 @@ SMM_API_KEY = os.environ.get('SMM_API_KEY')
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
 PORT = int(os.environ.get('PORT', 8443))
 
-# ✅ ADMIN ID (നിങ്ങളുടെ ID ഇവിടെ മാറ്റാൻ മറക്കരുത്!)
+# ✅ ADMIN ID (നിങ്ങളുടെ ID)
 ADMIN_ID = 7567364364 
 
-# --- SERVICE LIST (ID, Name, Your Selling Price) ---
-# Format: "SERVICE_ID": {"name": "NAME", "price": PRICE_PER_1000}
+# --- SERVICE LIST ---
 SERVICES = {
-    "11142": {"name": "Instagram Likes (Fast) ❤️", "price": 30},      # Cost: ~20
-    "11395": {"name": "IG Followers (Cheap) 👤", "price": 100},       # Cost: ~75
-    "363":   {"name": "IG Followers (Non-Drop 365 Days) ⭐", "price": 400}, # Cost: ~317
-    "8965":  {"name": "Telegram Members (Indian) 🇮🇳", "price": 40},   # Cost: ~25
-    "7939":  {"name": "YouTube Views (Lifetime) ▶️", "price": 180}    # Cost: ~135
+    "11142": {"name": "Instagram Likes (Fast) ❤️", "price": 30, "cat": "ig"},
+    "11377": {"name": "IG Followers (Cheap) 👤", "price": 100, "cat": "ig"},
+    "363":   {"name": "IG Followers (Non-Drop 365 Days) ⭐", "price": 400, "cat": "ig"},
+    "8965":  {"name": "Telegram Members (Indian) 🇮🇳", "price": 40, "cat": "tg"},
+    "7939":  {"name": "YouTube Views (Lifetime) ▶️", "price": 180, "cat": "yt"}
 }
 
 # --- DATABASE ---
@@ -34,72 +33,134 @@ users_col = db["users"]
 # --- LOGGING ---
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- START ---
+# --- KEYBOARDS ---
+def main_menu_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("💰 Check Balance", callback_data='balance'),
+         InlineKeyboardButton("📋 Services", callback_data='categories')],
+        [InlineKeyboardButton("📞 Support / Add Funds", callback_data='support')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def category_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("📸 Instagram", callback_data='cat_ig'),
+         InlineKeyboardButton("✈️ Telegram", callback_data='cat_tg')],
+        [InlineKeyboardButton("▶️ YouTube", callback_data='cat_yt')],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data='main_menu')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def back_button():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data='main_menu')]])
+
+# --- COMMANDS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     users_col.update_one({"user_id": user.id}, {"$setOnInsert": {"balance": 0}}, upsert=True)
     
     await update.message.reply_text(
-        f"👋 **Welcome, {user.first_name}!** 🚀\n\n"
-        "Best SMM Panel Bot for Instagram & Telegram Services.\n\n"
-        "💰 **Check Balance:** /balance\n"
-        "📋 **View Services:** /services\n"
-        "🛒 **To Order:** `/order <service_id> <link> <quantity>`\n\n"
-        "_(Contact Admin to add money to wallet)_"
+        f"👋 **Hello, {user.first_name}!**\n\n"
+        "Welcome to the **Premium SMM Store**. 🚀\n"
+        "Boost your social media instantly!\n\n"
+        "👇 **Select an option below:**",
+        reply_markup=main_menu_keyboard(),
+        parse_mode='Markdown'
     )
 
-# --- CHECK BALANCE ---
-async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    user_data = users_col.find_one({"user_id": user_id})
-    bal = user_data.get("balance", 0) if user_data else 0
-    await update.message.reply_text(f"💰 **Your Wallet Balance:** ₹{round(bal, 2)}")
-
-# --- SHOW SERVICES ---
-async def services(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "📋 **Available Services & Prices (Per 1000):**\n\n"
+# --- BUTTON HANDLER (The Magic) ---
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
     
-    for s_id, data in SERVICES.items():
-        msg += f"🆔 **ID: {s_id}**\n📌 {data['name']}\n💵 Price: ₹{data['price']} / 1000\n------------------\n"
-    
-    msg += "\n⚠️ **How to Order:**\n`/order 11142 https://instagram.com/p/xyz 1000`"
-    await update.message.reply_text(msg)
+    data = query.data
 
-# --- PLACE ORDER ---
+    # 1. Main Menu
+    if data == 'main_menu':
+        await query.edit_message_text(
+            "👇 **Main Menu**\nSelect an option below:",
+            reply_markup=main_menu_keyboard(),
+            parse_mode='Markdown'
+        )
+
+    # 2. Check Balance
+    elif data == 'balance':
+        user_id = query.from_user.id
+        user_data = users_col.find_one({"user_id": user_id})
+        bal = user_data.get("balance", 0) if user_data else 0
+        await query.edit_message_text(
+            f"💰 **Your Wallet Balance:** ₹{round(bal, 2)}\n\n"
+            "To add funds, contact Admin.",
+            reply_markup=back_button(),
+            parse_mode='Markdown'
+        )
+
+    # 3. Support
+    elif data == 'support':
+        await query.edit_message_text(
+            "📞 **Support & Add Funds**\n\n"
+            "To add money to your wallet, please message the admin:\n"
+            "👤 **Admin:** @YourUsernameHere\n\n"
+            "_(Send payment screenshot and your User ID)_",
+            reply_markup=back_button(),
+            parse_mode='Markdown'
+        )
+
+    # 4. Show Categories
+    elif data == 'categories':
+        await query.edit_message_text(
+            "📋 **Select a Category:**",
+            reply_markup=category_keyboard(),
+            parse_mode='Markdown'
+        )
+
+    # 5. Show Services (Based on Category)
+    elif data.startswith('cat_'):
+        cat = data.split('_')[1]
+        msg = "📋 **Available Services:**\n\n"
+        
+        for s_id, info in SERVICES.items():
+            if info['cat'] == cat:
+                msg += f"🆔 **ID: {s_id}**\n📌 {info['name']}\n💵 Price: ₹{info['price']} / 1000\n\n"
+        
+        msg += "⚠️ **To Order:** Copy the ID and send:\n`/order <id> <link> <quantity>`"
+        
+        # Add a "Back to Categories" button
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='categories')]]
+        await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+# --- ORDER COMMAND (Same as before) ---
 async def order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_data = users_col.find_one({"user_id": user_id})
     current_bal = user_data.get("balance", 0)
 
     try:
-        # Command: /order 11142 link 1000
         service_id = context.args[0]
         link = context.args[1]
         quantity = int(context.args[2])
     except (IndexError, ValueError):
-        await update.message.reply_text("❌ **Format Wrong!**\nUse: `/order <service_id> <link> <quantity>`")
+        await update.message.reply_text("❌ **Usage:** `/order <service_id> <link> <quantity>`")
         return
 
-    # Check if Service Exists
     if service_id not in SERVICES:
-        await update.message.reply_text("❌ **Invalid Service ID!** Check /services")
+        await update.message.reply_text("❌ **Invalid Service ID!** Check Menu.")
         return
 
-    # Calculate Cost (Based on YOUR Selling Price)
     price_per_1k = SERVICES[service_id]['price']
     total_cost = (price_per_1k / 1000) * quantity
 
-    if quantity < 10: # Minimum limit check
+    if quantity < 10:
         await update.message.reply_text("❌ Minimum quantity is 10.")
         return
 
     if current_bal < total_cost:
-        await update.message.reply_text(f"❌ **Insufficient Balance!**\nNeed: ₹{total_cost}\nYour Bal: ₹{current_bal}")
+        await update.message.reply_text(f"❌ **Low Balance!**\nCost: ₹{total_cost}\nYou have: ₹{current_bal}")
         return
 
-    status_msg = await update.message.reply_text("⏳ **Processing Order...**")
+    status_msg = await update.message.reply_text("⏳ **Placing Order...**")
 
-    # --- SEND ORDER TO MAIN PROVIDER ---
+    # API Call
     params = {
         'key': SMM_API_KEY,
         'action': 'add',
@@ -109,61 +170,42 @@ async def order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     
     try:
-        # Request to xmediasmm
         res = requests.post(SMM_API_URL, data=params).json()
-        
         if 'order' in res:
-            # Success! Deduct Balance
             new_bal = current_bal - total_cost
             users_col.update_one({"user_id": user_id}, {"$set": {"balance": new_bal}})
-            
             await status_msg.edit_text(
-                f"✅ **Order Successful!** 🚀\n\n"
-                f"🆔 Order ID: `{res['order']}`\n"
-                f"📉 Cost Deducted: ₹{total_cost}\n"
-                f"💰 Remaining Balance: ₹{round(new_bal, 2)}"
+                f"✅ **Ordered Successfully!**\n🆔 Order ID: `{res['order']}`\n💰 Cost: ₹{total_cost}\n📉 Balance: ₹{new_bal}"
             )
-            
-            # Notify Admin (You)
-            await context.bot.send_message(ADMIN_ID, f"🔔 **New Order!**\nUser: {user_id}\nService: {service_id}\nProfit Made! 🤑")
-            
+            await context.bot.send_message(ADMIN_ID, f"🔔 **New Sale!** ₹{total_cost} (User: {user_id})")
         else:
-            error_msg = res.get('error', 'Unknown Error')
-            await status_msg.edit_text(f"❌ **Order Failed!**\nServer Error: {error_msg}")
-
+            await status_msg.edit_text(f"❌ Failed: {res.get('error')}")
     except Exception as e:
-        await status_msg.edit_text(f"❌ Connection Error: {e}")
+        await status_msg.edit_text(f"❌ Error: {e}")
 
 # --- ADMIN: ADD FUNDS ---
 async def add_funds(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
+    if update.effective_user.id != ADMIN_ID: return
     try:
         target_id = int(context.args[0])
         amount = float(context.args[1])
-        
         users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount}}, upsert=True)
-        await update.message.reply_text(f"✅ Added ₹{amount} to User {target_id}")
-        await context.bot.send_message(target_id, f"✅ **Deposit Received:** ₹{amount} added to your wallet!")
-    except:
-        await update.message.reply_text("Usage: `/addfunds <user_id> <amount>`")
+        await update.message.reply_text(f"✅ Added ₹{amount}")
+        await context.bot.send_message(target_id, f"✅ **Account Credited:** ₹{amount}")
+    except: await update.message.reply_text("Usage: `/addfunds <id> <amount>`")
 
 # --- MAIN ---
 def main():
-    if not TOKEN:
-        print("Error: TOKEN missing.")
-        return
-
+    if not TOKEN: return
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("balance", balance))
-    app.add_handler(CommandHandler("services", services))
     app.add_handler(CommandHandler("order", order))
     app.add_handler(CommandHandler("addfunds", add_funds))
+    
+    # Button Handler Added Here 👇
+    app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("SMM Bot Started... 🔥")
     app.run_webhook(listen="0.0.0.0", port=PORT, url_path=TOKEN, webhook_url=f"{WEBHOOK_URL}/{TOKEN}")
 
 if __name__ == "__main__":
