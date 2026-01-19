@@ -14,7 +14,7 @@ SMM_API_URL = os.environ.get('SMM_API_URL')
 SMM_API_KEY = os.environ.get('SMM_API_KEY') 
 
 # ✅ ADMIN ID (നിങ്ങളുടെ ID കൊടുക്കുക, എങ്കിലേ ബാലൻസ് ആഡ് ചെയ്യാൻ പറ്റൂ)
-ADMIN_ID = 123456789 
+ADMIN_ID = 7567364364 
 
 # --- DATABASE ---
 client = MongoClient(MONGO_URI)
