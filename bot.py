@@ -13,14 +13,14 @@ SMM_API_KEY = os.environ.get('SMM_API_KEY')
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
 PORT = int(os.environ.get('PORT', 8443))
 
-# ✅ ADMIN ID
+# ✅ ADMIN ID (നിങ്ങളുടെ ID)
 ADMIN_ID = 7567364364 
 
-# ⚠️ ശ്രദ്ധിക്കുക: QR Code ID താഴെ മാറ്റണം (ഘട്ടം 2 നോക്കുക)
-QR_CODE_FILE_ID = "PLACE_HOLDER_ID" 
+# ✅ QR CODE FILE ID (നിങ്ങൾ തന്ന ശരിക്കുള്ള ID)
+QR_CODE_FILE_ID = "AgACAgQAAxkBAAI0UGluU4Bg0onFlgUgedyzb0RO0uYCAALYDGsbpjJwU0ieEncrdtqiAQADAgADeAADOAQ"
 
-# UPI ID
-MY_UPI_ID = "7567364364@ybl" 
+# ⚠️ നിങ്ങളുടെ UPI ID ഇവിടെ മാറ്റാം (ഉദാഹരണത്തിന്: 9876543210@ybl)
+MY_UPI_ID = "your-upi-id@okbank" 
 
 # --- SERVICE LIST ---
 SERVICES = {
@@ -61,7 +61,14 @@ def category_keyboard():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     users_col.update_one({"user_id": user.id}, {"$setOnInsert": {"balance": 0, "mode": "normal"}}, upsert=True)
-    await update.message.reply_text(f"👋 **Hello, {user.first_name}!**\n\n🚀 **Welcome to Premium SMM Store.**", reply_markup=main_menu_keyboard(), parse_mode='Markdown')
+    
+    await update.message.reply_text(
+        f"👋 **Hello, {user.first_name}!**\n\n"
+        "🚀 **Welcome to Premium SMM Store.**\n"
+        "Click a button below to get started!",
+        reply_markup=main_menu_keyboard(),
+        parse_mode='Markdown'
+    )
 
 # --- BUTTON HANDLER ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -82,91 +89,152 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'categories':
         await query.edit_message_text("📋 **Select Category:**", reply_markup=category_keyboard(), parse_mode='Markdown')
 
+    # ADD FUNDS REQUEST (SHOW QR)
     elif data == 'add_funds_request':
         users_col.update_one({"user_id": user_id}, {"$set": {"mode": "waiting_payment_proof"}})
-        caption = f"💳 **Add Funds**\nUPI: `{MY_UPI_ID}`\n\nScan QR & Send Screenshot here."
+        
+        caption_text = (
+            "💳 **Add Funds via UPI**\n\n"
+            f"🆔 **UPI ID:** `{MY_UPI_ID}`\n\n"
+            "1️⃣ Scan QR or Pay to UPI ID.\n"
+            "2️⃣ Take a Screenshot.\n"
+            "3️⃣ **Send the Screenshot here.**"
+        )
+        
         try:
-            await query.message.reply_photo(photo=QR_CODE_FILE_ID, caption=caption, parse_mode='Markdown')
-        except:
-            await query.message.reply_text(f"⚠️ QR Not Set.\nUPI: `{MY_UPI_ID}`\n\nSend Screenshot here.", parse_mode='Markdown')
+            # Send QR Code Photo
+            await query.message.reply_photo(photo=QR_CODE_FILE_ID, caption=caption_text, parse_mode='Markdown')
+        except Exception as e:
+            await query.message.reply_text(f"⚠️ QR Error. Use UPI ID:\n`{MY_UPI_ID}`\n\nSend Screenshot after payment.", parse_mode='Markdown')
 
+    # ADMIN APPROVAL LOGIC
     elif data.startswith('approve_'):
-        _, target_id, amount = data.split('_')
-        users_col.update_one({"user_id": int(target_id)}, {"$inc": {"balance": float(amount)}})
-        await query.edit_message_text(f"✅ Approved ₹{amount}")
-        await context.bot.send_message(int(target_id), f"✅ **Deposit Confirmed:** ₹{amount} added!")
+        _, target_id, amount_str = data.split('_')
+        target_id = int(target_id)
+        amount = float(amount_str)
+
+        users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount}})
+        
+        await query.edit_message_text(f"✅ **Approved!** Added ₹{amount} to User {target_id}")
+        await context.bot.send_message(target_id, f"✅ **Deposit Confirmed!**\n₹{amount} has been added to your wallet. 💰")
 
     elif data.startswith('reject_'):
         target_id = int(data.split('_')[1])
-        await query.edit_message_text("❌ Rejected")
-        await context.bot.send_message(target_id, "❌ Payment Rejected.")
+        await query.edit_message_text(f"❌ **Rejected** payment for User {target_id}")
+        await context.bot.send_message(target_id, "❌ **Payment Rejected.**\nPlease contact admin with valid proof.")
 
     elif data.startswith('cat_'):
         cat = data.split('_')[1]
-        keyboard = [[InlineKeyboardButton(f"{info['name']} - ₹{info['price']}", callback_data=f"srv_{s_id}")] for s_id, info in SERVICES.items() if info['cat'] == cat]
+        keyboard = []
+        for s_id, info in SERVICES.items():
+            if info['cat'] == cat:
+                keyboard.append([InlineKeyboardButton(f"{info['name']} - ₹{info['price']}", callback_data=f"srv_{s_id}")])
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data='categories')])
         await query.edit_message_text("👇 **Select Service:**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
     elif data.startswith('srv_'):
         s_id = data.split('_')[1]
         users_col.update_one({"user_id": user_id}, {"$set": {"mode": "waiting_for_link", "temp_service": s_id}})
-        await query.edit_message_text(f"✅ Selected: {SERVICES[s_id]['name']}\n🔗 **Send Link now:**", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data='main_menu')]]), parse_mode='Markdown')
+        await query.edit_message_text(f"✅ Selected: {SERVICES[s_id]['name']}\n🔗 **Step 1:** Send Link now.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data='main_menu')]]), parse_mode='Markdown')
 
-# --- MESSAGE HANDLER (Admin Tool & Orders) ---
+# --- MESSAGE HANDLER ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     
-    is_photo = bool(update.message.photo)
-    text = update.message.caption if is_photo else update.message.text
-    
-    # 🔥 ADMIN TOOL: Get File ID
-    if user_id == ADMIN_ID and is_photo:
-        user_data = users_col.find_one({"user_id": user_id})
-        if user_data.get("mode") == "normal":
-            file_id = update.message.photo[-1].file_id
-            await update.message.reply_text(f"🆔 **File ID Detected!**\n\n`{file_id}`\n\n(Copy this and paste it in QR_CODE_FILE_ID)", parse_mode='Markdown')
-            return
+    # Check if message is text or photo
+    if update.message.photo:
+        is_photo = True
+        text = update.message.caption if update.message.caption else ""
+    else:
+        is_photo = False
+        text = update.message.text if update.message.text else ""
 
     user_data = users_col.find_one({"user_id": user_id})
     mode = user_data.get("mode", "normal")
 
-    if mode == "waiting_payment_proof" and is_photo:
-        await update.message.reply_text("⏳ Proof Sent to Admin.")
-        keyboard = [[InlineKeyboardButton(f"✅ ₹{amt}", callback_data=f'approve_{user_id}_{amt}') for amt in [10, 50, 100]], [InlineKeyboardButton("❌ Reject", callback_data=f'reject_{user_id}')]]
-        await context.bot.send_photo(chat_id=ADMIN_ID, photo=update.message.photo[-1].file_id, caption=f"🔔 **Payment Proof!** User: {user.first_name}", reply_markup=InlineKeyboardMarkup(keyboard))
-        users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
+    # --- PAYMENT PROOF HANDLING ---
+    if mode == "waiting_payment_proof":
+        if is_photo:
+            await update.message.reply_text("⏳ **Proof Received!** Sent to Admin for approval.")
+            
+            # Admin Buttons
+            keyboard = [
+                [InlineKeyboardButton("✅ Add ₹10", callback_data=f'approve_{user_id}_10'),
+                 InlineKeyboardButton("✅ Add ₹50", callback_data=f'approve_{user_id}_50')],
+                [InlineKeyboardButton("✅ Add ₹100", callback_data=f'approve_{user_id}_100'),
+                 InlineKeyboardButton("✅ Add ₹500", callback_data=f'approve_{user_id}_500')],
+                 [InlineKeyboardButton("❌ Reject", callback_data=f'reject_{user_id}')]
+            ]
+            
+            # Forward photo to Admin
+            await context.bot.send_photo(
+                chat_id=ADMIN_ID, 
+                photo=update.message.photo[-1].file_id,
+                caption=f"🔔 **Payment Proof!**\nUser: {user.first_name} (ID: `{user_id}`)\n\nApprove amount below: 👇",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+            
+            users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
+        else:
+            await update.message.reply_text("⚠️ Please send the **Screenshot (Photo)** of payment.")
         return
 
-    if mode == "waiting_for_link" and text:
-        users_col.update_one({"user_id": user_id}, {"$set": {"mode": "waiting_for_quantity", "temp_link": text}})
-        await update.message.reply_text("✅ Link Saved! 🔢 **Send Quantity:**")
-    
-    elif mode == "waiting_for_quantity" and text:
-        if not text.isdigit(): return await update.message.reply_text("⚠️ Numbers only!")
-        quantity = int(text)
-        service_id, link = user_data.get("temp_service"), user_data.get("temp_link")
-        total_cost = (SERVICES[service_id]['price'] / 1000) * quantity
-        
-        if user_data.get("balance", 0) < total_cost:
-            await update.message.reply_text(f"❌ Low Balance! Need ₹{total_cost}")
-        else:
-            res = requests.post(SMM_API_URL, data={'key': SMM_API_KEY, 'action': 'add', 'service': service_id, 'link': link, 'quantity': quantity}).json()
-            if 'order' in res:
-                users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -total_cost}, "$set": {"mode": "normal"}})
-                await update.message.reply_text(f"✅ **Order Placed!** ID: `{res['order']}`\n💰 Cost: ₹{total_cost}")
-            else:
-                await update.message.reply_text(f"❌ Failed: {res.get('error')}")
-                if "balance" in str(res): await context.bot.send_message(ADMIN_ID, "⚠️ **Alert:** Main SMM Account Empty!")
-        
-        users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
+    # --- ORDER HANDLING ---
+    if not is_photo and text:
+        if mode == "waiting_for_link":
+            users_col.update_one({"user_id": user_id}, {"$set": {"mode": "waiting_for_quantity", "temp_link": text}})
+            await update.message.reply_text("✅ Link Saved!\n🔢 **Step 2:** How many do you want? (Number only)")
 
+        elif mode == "waiting_for_quantity":
+            if not text.isdigit():
+                await update.message.reply_text("⚠️ Send a number only!")
+                return
+            
+            quantity = int(text)
+            service_id = user_data.get("temp_service")
+            link = user_data.get("temp_link")
+            
+            price_per_1k = SERVICES[service_id]['price']
+            total_cost = (price_per_1k / 1000) * quantity
+            current_bal = user_data.get("balance", 0)
+
+            if current_bal < total_cost:
+                await update.message.reply_text(f"❌ **Low Balance!** Need: ₹{total_cost}. Add funds.")
+                users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
+                return
+
+            status_msg = await update.message.reply_text("⏳ **Processing...**")
+            
+            params = {'key': SMM_API_KEY, 'action': 'add', 'service': service_id, 'link': link, 'quantity': quantity}
+            try:
+                res = requests.post(SMM_API_URL, data=params).json()
+                if 'order' in res:
+                    new_bal = current_bal - total_cost
+                    users_col.update_one({"user_id": user_id}, {"$set": {"balance": new_bal, "mode": "normal"}})
+                    await status_msg.edit_text(f"✅ **Ordered!** ID: `{res['order']}`\n💰 Cost: ₹{total_cost}\n📉 Bal: ₹{new_bal}")
+                    await context.bot.send_message(ADMIN_ID, f"🔔 Sale! ₹{total_cost} (User: {user_id})")
+                else:
+                    error_msg = res.get('error', 'Unknown Error')
+                    await status_msg.edit_text(f"❌ **Order Failed!**\nReason: {error_msg}")
+                    if "balance" in str(error_msg).lower():
+                        await context.bot.send_message(ADMIN_ID, "⚠️ **ADMIN ALERT:** Your Main SMM Account has Low Balance!")
+
+            except Exception as e:
+                await status_msg.edit_text(f"Error: {e}")
+            
+            users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
+
+# --- MAIN ---
 def main():
     if not TOKEN: return
     app = Application.builder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
+
     app.run_webhook(listen="0.0.0.0", port=PORT, url_path=TOKEN, webhook_url=f"{WEBHOOK_URL}/{TOKEN}")
 
 if __name__ == "__main__":
