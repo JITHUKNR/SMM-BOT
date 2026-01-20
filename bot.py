@@ -17,36 +17,36 @@ PORT = int(os.environ.get('PORT', 8443))
 # ✅ ADMIN ID
 ADMIN_ID = 7567364364 
 
-# ✅ REWARDS
+# ✅ REWARDS SETTINGS
 REFERRAL_BONUS = 1.0  
 DAILY_BONUS_AMOUNT = 0.50 
 
-# ✅ QR CODE FILE ID
-QR_CODE_FILE_ID = "AgACAgQAAxkBAAI0UGluU4Bg0onFlgUgedyzb0RO0uYCAALYDGsbpjJwU0ieEncrdtqiAQADAgADeAADOAQ"
+# ✅ NEW QR CODE FILE ID (Updated)
+QR_CODE_FILE_ID = "AgACAgQAAxkBAAI4X2lu6iQO7RNZ9FwOGpQ0u6XuHfc6AAK_C2sbxlR5U0SPAi2SVbwnAQADAgADeAADOAQ"
 
-# ✅ UPI ID
-MY_UPI_ID = "7567364364@ybl" 
+# ✅ NEW UPI ID (Updated)
+MY_UPI_ID = "abhiixz@ybl" 
 
-# --- SERVICE LIST (New IDs Added) ---
+# --- SERVICE LIST ---
 SERVICES = {
     # --- INSTAGRAM ---
     "8311":  {"name": "Insta Views (Super Fast) 🚀", "price": 10, "cat": "ig"},
     "11139": {"name": "Insta Reels Views 🎬", "price": 10, "cat": "ig"},
     "11467": {"name": "Insta Likes (High Quality) ❤️", "price": 25, "cat": "ig"},
-    "360":   {"name": "Insta Likes (Indian) 🇮🇳", "price": 60, "cat": "ig"}, # New!
-    "9759":  {"name": "IG Followers (Super Cheap) 📉", "price": 90, "cat": "ig"}, # New!
+    "360":   {"name": "Insta Likes (Indian) 🇮🇳", "price": 60, "cat": "ig"}, 
+    "9759":  {"name": "IG Followers (Super Cheap) 📉", "price": 90, "cat": "ig"}, 
     "11377": {"name": "IG Followers (High Quality) 👤", "price": 120, "cat": "ig"},
     "11381": {"name": "IG Followers (30 Days Refill) ⭐", "price": 190, "cat": "ig"},
     
     # --- TELEGRAM ---
     "11144": {"name": "Telegram Members (Cheapest) 🔥", "price": 20, "cat": "tg"},
-    "8965":  {"name": "Telegram Members (Indian) 🇮🇳", "price": 50, "cat": "tg"}, # New!
+    "8965":  {"name": "Telegram Members (Indian) 🇮🇳", "price": 50, "cat": "tg"}, 
     "10690": {"name": "Telegram Members (No Drop) ⭐", "price": 90, "cat": "tg"},
     "11303": {"name": "Telegram Post Views 👁️", "price": 10, "cat": "tg"},
     
     # --- YOUTUBE ---
     "10051": {"name": "YouTube Views (Lifetime) ▶️", "price": 100, "cat": "yt"},
-    "6680":  {"name": "YouTube Likes 👍", "price": 50, "cat": "yt"}, # New!
+    "6680":  {"name": "YouTube Likes 👍", "price": 50, "cat": "yt"}, 
     
     # --- FACEBOOK ---
     "138":   {"name": "Facebook Video Views 🔵", "price": 20, "cat": "fb"},
