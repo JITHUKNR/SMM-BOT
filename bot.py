@@ -17,14 +17,14 @@ PORT = int(os.environ.get('PORT', 8443))
 # ✅ ADMIN ID
 ADMIN_ID = 7567364364 
 
-# ✅ REWARDS SETTINGS
+# ✅ SETTINGS
 REFERRAL_BONUS = 1.0  
 DAILY_BONUS_AMOUNT = 0.50 
+FREE_TRIAL_SERVICE_ID = "9759" # Free Trial-ന് കൊടുക്കുന്ന സർവീസ് (Cheap Followers)
+FREE_TRIAL_QUANTITY = 100      # എത്ര എണ്ണം ഫ്രീ കൊടുക്കണം?
 
-# ✅ NEW QR CODE FILE ID (Updated)
+# ✅ QR CODE & UPI
 QR_CODE_FILE_ID = "AgACAgQAAxkBAAI4X2lu6iQO7RNZ9FwOGpQ0u6XuHfc6AAK_C2sbxlR5U0SPAi2SVbwnAQADAgADeAADOAQ"
-
-# ✅ NEW UPI ID (Updated)
 MY_UPI_ID = "abhiixz@ybl" 
 
 # --- SERVICE LIST ---
@@ -69,6 +69,7 @@ def main_menu_keyboard():
     keyboard = [
         [InlineKeyboardButton("💰 Check Balance", callback_data='balance'),
          InlineKeyboardButton("📋 Services", callback_data='categories')],
+        [InlineKeyboardButton("🎁 Free 100 Followers", callback_data='free_trial')], # NEW BUTTON 🔥
         [InlineKeyboardButton("💳 Add Funds (QR)", callback_data='add_funds_request'),
          InlineKeyboardButton("🎁 Daily Bonus", callback_data='daily_bonus')],
         [InlineKeyboardButton("🤝 Invite & Earn", callback_data='invite_link')]
@@ -104,7 +105,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await context.bot.send_message(referrer_id, f"🎉 **New Referral!**\n💰 You earned ₹{REFERRAL_BONUS}!")
             except ValueError: pass
 
-        users_col.insert_one({"user_id": user_id, "balance": 0, "mode": "normal", "referred_by": referrer_id})
+        users_col.insert_one({"user_id": user_id, "balance": 0, "mode": "normal", "referred_by": referrer_id, "free_claimed": False})
         await update.message.reply_text(f"👋 **Welcome, {user.first_name}!**")
     else:
         users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
@@ -142,6 +143,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == 'categories':
         await query.edit_message_text("📋 **Select Category:**", reply_markup=category_keyboard(), parse_mode='Markdown')
+
+    # 🔥 FREE TRIAL LOGIC 🔥
+    elif data == 'free_trial':
+        user_data = users_col.find_one({"user_id": user_id})
+        if user_data.get("free_claimed", False):
+            await query.edit_message_text("❌ **Already Claimed!**\nYou have already used the free trial.\n\nPlease deposit funds to buy more.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data='main_menu')]]), parse_mode='Markdown')
+        else:
+            users_col.update_one({"user_id": user_id}, {"$set": {"mode": "waiting_free_link"}})
+            await query.edit_message_text(
+                "🎁 **Free 100 Instagram Followers!**\n\n"
+                "👇 **Paste your Instagram Profile Link:**\n"
+                "_(Make sure your account is Public)_",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data='main_menu')]]),
+                parse_mode='Markdown'
+            )
 
     elif data == 'daily_bonus':
         user_data = users_col.find_one({"user_id": user_id})
@@ -202,12 +218,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_data: return
     mode = user_data.get("mode", "normal")
 
+    # --- PAYMENT PROOF ---
     if mode == "waiting_payment_proof" and is_photo:
         await update.message.reply_text("⏳ Proof Sent!")
         keyboard = [[InlineKeyboardButton(f"✅ ₹{a}", callback_data=f'approve_{user_id}_{a}') for a in [10, 50, 100, 500]], [InlineKeyboardButton("❌ Reject", callback_data=f'reject_{user_id}')]]
         await context.bot.send_photo(ADMIN_ID, update.message.photo[-1].file_id, caption=f"🔔 Payment from {user.first_name}", reply_markup=InlineKeyboardMarkup(keyboard))
         users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
 
+    # --- FREE TRIAL LINK ---
+    elif mode == "waiting_free_link" and text:
+        # Check claim status again for safety
+        if user_data.get("free_claimed", False):
+             users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
+             return await update.message.reply_text("❌ You already claimed this!")
+        
+        status_msg = await update.message.reply_text("⏳ **Processing Free Order...**")
+        
+        # Place Order (Admin pays for this)
+        params = {'key': SMM_API_KEY, 'action': 'add', 'service': FREE_TRIAL_SERVICE_ID, 'link': text, 'quantity': FREE_TRIAL_QUANTITY}
+        try:
+            res = requests.post(SMM_API_URL, data=params).json()
+            if 'order' in res:
+                # Mark as Claimed
+                users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal", "free_claimed": True}})
+                await status_msg.edit_text(f"🎉 **Success!** 100 Followers sent.\n🆔 Order ID: `{res['order']}`\n\nLike this service? Add funds and buy more!")
+                await context.bot.send_message(ADMIN_ID, f"🎁 **Free Trial Claimed!** User: {user_id}")
+            else:
+                await status_msg.edit_text(f"❌ Failed: {res.get('error')}")
+                users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
+        except Exception as e:
+            await status_msg.edit_text(f"Error: {e}")
+            users_col.update_one({"user_id": user_id}, {"$set": {"mode": "normal"}})
+
+    # --- PAID ORDER ---
     elif not is_photo and text:
         if mode == "waiting_for_link":
             users_col.update_one({"user_id": user_id}, {"$set": {"mode": "waiting_for_quantity", "temp_link": text}})
