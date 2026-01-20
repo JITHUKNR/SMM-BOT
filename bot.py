@@ -27,13 +27,30 @@ QR_CODE_FILE_ID = "AgACAgQAAxkBAAI0UGluU4Bg0onFlgUgedyzb0RO0uYCAALYDGsbpjJwU0ieE
 # ✅ UPI ID
 MY_UPI_ID = "7567364364@ybl" 
 
-# --- SERVICE LIST ---
+# --- SERVICE LIST (Updated from Screenshots) ---
 SERVICES = {
-    "11142": {"name": "Instagram Likes (Fast) ❤️", "price": 30, "cat": "ig"},
-    "11377": {"name": "IG Followers (Cheap) 👤", "price": 100, "cat": "ig"},
-    "363":   {"name": "IG Followers (Non-Drop) ⭐", "price": 400, "cat": "ig"},
-    "8965":  {"name": "Telegram Members 🇮🇳", "price": 40, "cat": "tg"},
-    "7939":  {"name": "YouTube Views ▶️", "price": 180, "cat": "yt"}
+    # --- INSTAGRAM ---
+    "8311":  {"name": "Insta Views (Super Fast) 🚀", "price": 10, "cat": "ig"}, # Buy: ₹0.69
+    "11139": {"name": "Insta Reels Views 🎬", "price": 10, "cat": "ig"},      # Buy: ₹0.09
+    "11467": {"name": "Insta Likes (High Quality) ❤️", "price": 25, "cat": "ig"}, # Buy: ₹11.96
+    "5741":  {"name": "IG Followers (Indian Mix) 🇮🇳", "price": 120, "cat": "ig"}, # Buy: ₹85.19
+    "11381": {"name": "IG Followers (30 Days Refill) ⭐", "price": 190, "cat": "ig"}, # Buy: ₹141.90
+    "11377": {"name": "IG Followers (Cheap) 👤", "price": 100, "cat": "ig"},   # Buy: ~₹74
+    
+    # --- TELEGRAM ---
+    "11144": {"name": "Telegram Members (Cheapest) 🔥", "price": 20, "cat": "tg"}, # Buy: ₹4.50 (Best Profit!)
+    "10690": {"name": "Telegram Members (No Drop) ⭐", "price": 90, "cat": "tg"}, # Buy: ₹51.44
+    "11303": {"name": "Telegram Post Views 👁️", "price": 10, "cat": "tg"},       # Buy: ₹0.09
+    
+    # --- YOUTUBE ---
+    "10051": {"name": "YouTube Views (Lifetime) ▶️", "price": 100, "cat": "yt"}, # Buy: ₹64.90
+    
+    # --- FACEBOOK (New) ---
+    "138":   {"name": "Facebook Video Views 🔵", "price": 20, "cat": "fb"},      # Buy: ₹5.20
+    "10522": {"name": "Facebook Post Likes 👍", "price": 40, "cat": "fb"},       # Buy: ₹17.89
+    
+    # --- TWITTER / X (New) ---
+    "11222": {"name": "X (Twitter) Video Views 🐦", "price": 10, "cat": "tw"}    # Buy: ₹0.87
 }
 
 # --- DATABASE ---
@@ -59,7 +76,9 @@ def category_keyboard():
     keyboard = [
         [InlineKeyboardButton("📸 Instagram", callback_data='cat_ig'),
          InlineKeyboardButton("✈️ Telegram", callback_data='cat_tg')],
-        [InlineKeyboardButton("▶️ YouTube", callback_data='cat_yt')],
+        [InlineKeyboardButton("▶️ YouTube", callback_data='cat_yt'),
+         InlineKeyboardButton("🔵 Facebook", callback_data='cat_fb')],
+        [InlineKeyboardButton("🐦 Twitter (X)", callback_data='cat_tw')],
         [InlineKeyboardButton("🔙 Back to Menu", callback_data='main_menu')]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -95,37 +114,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
-# 🔥 BROADCAST FEATURE (NEW) 🔥
+# 🔥 BROADCAST FEATURE 🔥
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Security: Only Admin can use
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    # Check if message is provided
+    if update.effective_user.id != ADMIN_ID: return
     message = " ".join(context.args)
     if not message:
-        await update.message.reply_text("❌ Usage: `/broadcast Your Message Here`")
+        await update.message.reply_text("❌ Usage: `/broadcast Your Message`")
         return
-
     status_msg = await update.message.reply_text("⏳ **Broadcasting started...**")
-
-    # Get all users
     users = users_col.find({}, {"user_id": 1})
     success_count = 0
-    fail_count = 0
-
     for user in users:
         try:
             await context.bot.send_message(chat_id=user['user_id'], text=f"📢 **ANNOUNCEMENT**\n\n{message}")
             success_count += 1
-        except Exception:
-            fail_count += 1 # Blocked users or errors
-
-    await status_msg.edit_text(
-        f"✅ **Broadcast Complete!**\n\n"
-        f"📩 Sent to: {success_count}\n"
-        f"🚫 Failed: {fail_count}"
-    )
+        except: pass
+    await status_msg.edit_text(f"✅ **Sent to:** {success_count} users")
 
 # --- BUTTON HANDLER ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -192,7 +196,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith('cat_'):
         cat = data.split('_')[1]
-        keyboard = [[InlineKeyboardButton(f"{info['name']} - ₹{info['price']}", callback_data=f"srv_{s_id}")] for s_id, info in SERVICES.items() if info['cat'] == cat]
+        keyboard = []
+        for s_id, info in SERVICES.items():
+            if info['cat'] == cat:
+                keyboard.append([InlineKeyboardButton(f"{info['name']} - ₹{info['price']}", callback_data=f"srv_{s_id}")])
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data='categories')])
         await query.edit_message_text("👇 **Select Service:**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
@@ -211,7 +218,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user_id == ADMIN_ID and is_photo:
         user_data = users_col.find_one({"user_id": user_id})
-        if user_data.get("mode") == "normal": 
+        if user_data and user_data.get("mode") == "normal": 
             await update.message.reply_text(f"🆔 File ID:\n`{update.message.photo[-1].file_id}`", parse_mode='Markdown')
             return
 
@@ -251,7 +258,7 @@ def main():
     if not TOKEN: return
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("broadcast", broadcast)) # New Command Added
+    app.add_handler(CommandHandler("broadcast", broadcast)) 
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     app.run_webhook(listen="0.0.0.0", port=PORT, url_path=TOKEN, webhook_url=f"{WEBHOOK_URL}/{TOKEN}")
